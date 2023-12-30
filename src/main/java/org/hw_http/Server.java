@@ -13,7 +13,6 @@ import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
-
 public class Server {
     private final List<String> validPaths;
     private final ExecutorService threadPool;
@@ -47,23 +46,29 @@ public class Server {
                 }
 
                 final var path = parts[1];
-                if (!validPaths.contains(path)) {
+                if (!isValidPath(path)) {
                     sendNotFoundResponse(out);
                     return;
                 }
 
-                final var filePath = Path.of(".", "public", path);
-                final var mimeType = Files.probeContentType(filePath);
+                final var queryParams = Request.parseQueryParams(path);
+                final var request = new Request(path, queryParams);
+//                System.out.println(path);
+//                System.out.println(queryParams);
 
                 if (path.equals("/classic.html")) {
-                    sendClassicHtmlResponse(out, filePath);
+                    sendClassicHtmlResponse(out, Path.of(".", "public", path), request);
                 } else {
-                    sendFileResponse(out, filePath, mimeType);
+                    sendFileResponse(out, Path.of(".", "public", path), Files.probeContentType(Path.of(".", "public", path)), request);
                 }
             } catch (IOException e) {
                 e.printStackTrace();
             }
         });
+    }
+
+    private boolean isValidPath(String path) {
+        return validPaths.contains(Request.extractPathWithoutQuery(path));
     }
 
     private void sendNotFoundResponse(BufferedOutputStream out) throws IOException {
@@ -76,7 +81,7 @@ public class Server {
         out.flush();
     }
 
-    private void sendClassicHtmlResponse(BufferedOutputStream out, Path filePath) throws IOException {
+    private void sendClassicHtmlResponse(BufferedOutputStream out, Path filePath, Request request) throws IOException {
         final var template = Files.readString(filePath);
         final var content = template.replace("{time}", LocalDateTime.now().toString()).getBytes();
         out.write((
@@ -90,7 +95,7 @@ public class Server {
         out.flush();
     }
 
-    private void sendFileResponse(BufferedOutputStream out, Path filePath, String mimeType) throws IOException {
+    private void sendFileResponse(BufferedOutputStream out, Path filePath, String mimeType, Request request) throws IOException {
         final var length = Files.size(filePath);
         out.write((
                 "HTTP/1.1 200 OK\r\n" +
